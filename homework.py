@@ -44,8 +44,8 @@ def check_tokens():
         'TELEGRAM_TOKEN',
         'TELEGRAM_CHAT_ID'
     ]
-    missing_tokens = [t for t in tokens if not globals()[t] or '']
-    if len(missing_tokens) != 0:
+    missing_tokens = [t for t in tokens if not globals()[t]]
+    if missing_tokens:
         logger.critical(
             f'Отсутствуют переменные окружения: {missing_tokens}'
         )
@@ -69,7 +69,7 @@ def get_api_answer(timestamp):
                                headers=HEADERS,
                                params=payload)
     except requests.RequestException as error:
-        (f'Ошибка ответа API: {error}')
+        raise (f'Ошибка ответа API: {error}')
     if request.status_code != HTTPStatus.OK:
         raise ValueError(f'Ошибка ответа API: {request.status_code}')
     logger.debug('Ответ API получен.')
@@ -85,7 +85,7 @@ def check_response(response):
             'не соответствует ожидаемым.'
         )
     if 'homeworks' not in response:
-        raise TypeError(
+        raise KeyError(
             'В ответе API отсутствует обязательный ключ "homeworks".'
         )
     homeworks = response['homeworks']
@@ -115,21 +115,25 @@ def main():
     check_tokens()
     timestamp = int(time.time())
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_message = ''
+    last_message = ''
 
     while True:
         try:
             homework = get_api_answer(timestamp - RETRY_PERIOD)
             check_response(homework)
-            if len(homework['homeworks']) != 0:
-                current_homework = homework['homeworks']
-                message = parse_status(current_homework[0])
-                if message != current_message:
+            current_homeworks = homework['homeworks']
+            if current_homeworks:
+                message = parse_status(current_homeworks[0])
+                if message != last_message:
                     send_message(bot, message)
-                    current_message = parse_status(current_homework[0])
+                    last_message = message
+                else:
+                    logger.debug('Получено повторяющееся сообщение.')
+            else:
+                logger.debug('Статус работы не изменился.')
+            timestamp = homework['current_date']
         except telegram.error.TelegramError as error:
             logger.error(f'Ошибка отправки сообщения:{error}')
-            timestamp = homework['current_date']
 
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
@@ -137,6 +141,7 @@ def main():
             if message != f'Сбой в работе программы: {error}':
                 with suppress(Exception):
                     send_message(bot, message)
+                    last_message = message
         finally:
             time.sleep(RETRY_PERIOD)
 
