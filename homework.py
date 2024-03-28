@@ -69,7 +69,7 @@ def get_api_answer(timestamp):
                                headers=HEADERS,
                                params=payload)
     except requests.RequestException as error:
-        raise (f'Ошибка ответа API: {error}')
+        raise ConnectionError(f'Ошибка ответа API: {error}')
     if request.status_code != HTTPStatus.OK:
         raise ValueError(f'Ошибка ответа API: {request.status_code}')
     logger.debug('Ответ API получен.')
